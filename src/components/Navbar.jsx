@@ -22,15 +22,16 @@ const Navbar = () => {
     return () => unsubscribe();
   }, []);
 
+  // Updated path for Ask AI to point to the new route
   const navItems = [
     { name: 'Explore', icon: <Compass size={16} />, path: '/explore' },
-    { name: 'Ask AI', icon: <Bot size={16} />, path: '#' },
+    { name: 'Ask AI', icon: <Bot size={16} />, path: '/ask-ai' },
     { name: 'Library', icon: <Library size={16} />, path: '#' },
   ];
 
   return (
     <>
-      {/* --- DESKTOP NAVBAR (Your Original Code) --- */}
+      {/* --- DESKTOP NAVBAR --- */}
       <motion.nav 
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -82,11 +83,11 @@ const Navbar = () => {
 
         {/* Status Indicator */}
         <div className="w-24 flex justify-end">
-             <div className={`h-1 w-1 rounded-full animate-pulse ${user ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-red-600'}`} />
+             <div className={`h-1.5 w-1.5 rounded-full animate-pulse ${user ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-red-600'}`} />
         </div>
       </motion.nav>
 
-      {/* --- MOBILE BOTTOM NAVBAR (Added Only for Mobile) --- */}
+      {/* --- MOBILE BOTTOM NAVBAR --- */}
       <motion.div 
         initial={{ y: 100 }}
         animate={{ y: 0 }}
@@ -98,7 +99,8 @@ const Navbar = () => {
             onClick={() => item.path !== '#' && navigate(item.path)}
             className="flex flex-col items-center gap-1 text-[8px] font-black uppercase tracking-[0.1em] text-zinc-400 hover:text-red-600 transition-colors"
           >
-            {item.icon}
+            {/* Using slightly larger icons for mobile for better touch experience */}
+            {React.cloneElement(item.icon, { size: 20 })}
             <span>{item.name}</span>
           </button>
         ))}
@@ -108,7 +110,7 @@ const Navbar = () => {
             onClick={() => navigate('/profile')}
             className="flex flex-col items-center gap-1 text-[8px] font-black uppercase tracking-[0.1em] text-zinc-400"
           >
-            <UserCircle size={18} />
+            <UserCircle size={20} />
             <span>Profile</span>
           </button>
         ) : (
@@ -116,7 +118,7 @@ const Navbar = () => {
             onClick={() => navigate('/login')}
             className="flex flex-col items-center gap-1 text-[8px] font-black uppercase tracking-[0.1em] text-red-600"
           >
-            <UserCircle size={18} />
+            <UserCircle size={20} />
             <span>Login</span>
           </button>
         )}

@@ -1,11 +1,16 @@
 import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
+
+// Component Imports
 import Navbar from './components/Navbar'; 
+import Login from './components/Login';
+import Profile from './components/Profile';
+
+// Page Imports
 import LandingPage from './pages/Landing'; 
 import Explore from './pages/Explore';
-import Login from './components/Login';
-import Profile from './components/Profile'; // 1. Import your Profile page
+import AskAi from './pages/AskAI'; // Imported the new AskAI page
 
 // ResultsView kept for context
 const ResultsView = ({ query }) => {
@@ -46,10 +51,13 @@ const AnimatedRoutes = ({ activeQuery, setActiveQuery }) => {
           <Route path="/explore" element={<Explore />} />
           <Route path="/results" element={<ResultsView query={activeQuery} />} />
           
-          {/* 2. Added Profile Route */}
+          {/* Ask AI Route */}
+          <Route path="/ask-ai" element={<AskAi />} />
+          
+          {/* Profile Route */}
           <Route path="/profile" element={<Profile />} />
           
-          {/* Added Auth Routes */}
+          {/* Auth Routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Login />} />
           
