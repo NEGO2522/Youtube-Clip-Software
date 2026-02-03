@@ -1,11 +1,12 @@
-  import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
-import Navbar from './components/Navbar'; // Make sure path is correct
+import Navbar from './components/Navbar'; 
 import LandingPage from './pages/Landing'; 
 import Explore from './pages/Explore';
+import Login from './components/Login';
 
-// ResultsView kept for context - now with adjusted padding for Navbar
+// ResultsView kept for context
 const ResultsView = ({ query }) => {
   return (
     <div className="min-h-screen bg-[#050505] pt-32 p-6">
@@ -13,23 +14,28 @@ const ResultsView = ({ query }) => {
         <div className="lg:col-span-2 space-y-6">
           <div className="aspect-video bg-gray-900 rounded-3xl border border-white/10 overflow-hidden relative">
             <div className="w-full h-full bg-gradient-to-br from-zinc-800 to-black flex items-end p-8">
-               <span className="text-cyan-400 font-mono text-xs uppercase tracking-widest">Active Search: {query}</span>
+               <span className="text-red-600 font-mono text-xs uppercase tracking-widest">Active Search: {query}</span>
             </div>
           </div>
-          <h2 className="text-2xl font-bold">Neural Results Loaded</h2>
+          <h2 className="text-2xl font-bold uppercase tracking-tighter">Neural Results Loaded</h2>
         </div>
       </div>
     </div>
   );
 };
 
-// We wrap the content in a sub-component to access useLocation for AnimatePresence
+// Sub-component to handle route transitions and conditional Navbar
 const AnimatedRoutes = ({ activeQuery, setActiveQuery }) => {
   const location = useLocation();
   
+  // Define auth paths to hide the Navbar
+  const isAuthPage = location.pathname === '/login' || location.pathname === '/signup';
+  
   return (
     <>
-      <Navbar /> 
+      {/* Navbar will NOT render on Login or Signup pages */}
+      {!isAuthPage && <Navbar />} 
+      
       <AnimatePresence mode="wait">
         <Routes location={location} key={location.pathname}>
           <Route 
@@ -38,6 +44,13 @@ const AnimatedRoutes = ({ activeQuery, setActiveQuery }) => {
           />
           <Route path="/explore" element={<Explore />} />
           <Route path="/results" element={<ResultsView query={activeQuery} />} />
+          
+          {/* Added Auth Routes */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Login />} />
+          
+          {/* Catch-all: Redirects any unknown URL back to Home */}
+          <Route path="*" element={<LandingPage onSearchStart={(q) => setActiveQuery(q)} />} />
         </Routes>
       </AnimatePresence>
     </>
@@ -49,7 +62,7 @@ function App() {
 
   return (
     <Router>
-      <div className="App bg-[#020202]">
+      <div className="App bg-[#020202] min-h-screen selection:bg-red-600/30">
         <AnimatedRoutes activeQuery={activeQuery} setActiveQuery={setActiveQuery} />
       </div>
     </Router>
