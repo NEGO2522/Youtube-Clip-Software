@@ -5,6 +5,7 @@ import Navbar from './components/Navbar';
 import LandingPage from './pages/Landing'; 
 import Explore from './pages/Explore';
 import Login from './components/Login';
+import Profile from './components/Profile'; // 1. Import your Profile page
 
 // ResultsView kept for context
 const ResultsView = ({ query }) => {
@@ -44,6 +45,9 @@ const AnimatedRoutes = ({ activeQuery, setActiveQuery }) => {
           />
           <Route path="/explore" element={<Explore />} />
           <Route path="/results" element={<ResultsView query={activeQuery} />} />
+          
+          {/* 2. Added Profile Route */}
+          <Route path="/profile" element={<Profile />} />
           
           {/* Added Auth Routes */}
           <Route path="/login" element={<Login />} />

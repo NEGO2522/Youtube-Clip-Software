@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Youtube, 
@@ -8,12 +8,19 @@ import {
   UserCircle 
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { onAuthStateChanged } from "firebase/auth"; 
+import { auth } from "../firebase/firebase"; 
 
 const Navbar = () => {
   const navigate = useNavigate();
-  
-  // Auth state to toggle between Profile and Join Now
-  const [isSignedIn, setIsSignedIn] = useState(false);
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const navItems = [
     { name: 'Explore', icon: <Compass size={16} />, path: '/explore' },
@@ -49,20 +56,23 @@ const Navbar = () => {
           </button>
         ))}
 
-        {/* Profile / Join Now Logic */}
-        {isSignedIn ? (
+        {/* Updated Profile Logic */}
+        {user ? (
           <button 
             onClick={() => navigate('/profile')}
             className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400 hover:text-red-600 transition-colors group cursor-pointer"
           >
-            <span className="group-hover:scale-110 transition-transform">
-              <UserCircle size={16} />
+            {/* Standardized Default Icon for Everyone */}
+            <span className="group-hover:scale-110 transition-transform text-zinc-500 group-hover:text-red-600">
+              <UserCircle size={18} />
             </span>
-            Profile
+            {/* Shows Display Name, falling back to Email if name is null */}
+            <span className="max-w-[100px] truncate">
+              {user.displayName || user.email?.split('@')[0] || 'User'}
+            </span>
           </button>
         ) : (
           <button 
-            // Updated to point to /login
             onClick={() => navigate('/login')}
             className="px-4 py-1.5 bg-red-600 text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-full hover:bg-white hover:text-black transition-all cursor-pointer shadow-[0_0_15px_rgba(220,38,38,0.3)]"
           >
@@ -71,12 +81,9 @@ const Navbar = () => {
         )}
       </div>
 
-      {/* Right Side Status Indicator */}
-      <div className="w-24 flex justify-end cursor-pointer">
-           <div 
-             className="h-1 w-1 bg-red-600 rounded-full animate-pulse" 
-             onClick={() => setIsSignedIn(!isSignedIn)} // Toggle for testing UI
-           />
+      {/* Status Indicator */}
+      <div className="w-24 flex justify-end">
+           <div className={`h-1 w-1 rounded-full animate-pulse ${user ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-red-600'}`} />
       </div>
     </motion.nav>
   );
