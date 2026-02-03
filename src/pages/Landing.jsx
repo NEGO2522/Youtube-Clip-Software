@@ -1,18 +1,8 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  Search, 
-  Youtube, 
-  ChevronRight, 
-  Target, 
-  Sparkles, 
-  Compass, 
-  Clapperboard, 
-  Bot, 
-  Library, 
-  UserCircle 
-} from 'lucide-react';
+import { ChevronRight, Target, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import Navbar from '../components/Navbar'; // Adjust path based on your folder structure
 
 const LandingPage = ({ onSearchStart }) => {
   const [query, setQuery] = useState('');
@@ -26,51 +16,10 @@ const LandingPage = ({ onSearchStart }) => {
     navigate('/results');
   };
 
-  // 1. Added 'path' to the nav items configuration
-  const navItems = [
-    { name: 'Search', icon: <Search size={16} />, path: '/' },
-    { name: 'Explore', icon: <Compass size={16} />, path: '/explore' },
-    { name: 'Clips', icon: <Clapperboard size={16} />, path: '#' },
-    { name: 'Ask AI', icon: <Bot size={16} />, path: '#' },
-    { name: 'Library', icon: <Library size={16} />, path: '#' },
-    { name: 'Profile', icon: <UserCircle size={16} />, path: '#' },
-  ];
-
   return (
     <div className="h-screen w-full bg-[#020202] text-white overflow-hidden relative flex flex-col items-center justify-center font-sans selection:bg-red-600/40">
       
-      {/* --- NAVBAR --- */}
-      <motion.nav 
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="fixed top-0 w-full z-50 flex items-center justify-between px-10 py-6 bg-gradient-to-b from-black/80 to-transparent backdrop-blur-sm"
-      >
-        <div 
-          className="flex items-center gap-3 cursor-pointer" 
-          onClick={() => navigate('/')} // Logo returns to home
-        >
-          <Youtube className="text-red-600" size={24} fill="currentColor" />
-          <span className="text-sm font-black uppercase tracking-[0.3em] text-white">Clupe</span>
-        </div>
-
-        <div className="hidden md:flex items-center gap-8">
-          {navItems.map((item) => (
-            <button 
-              key={item.name}
-              // 2. Added onClick to handle navigation
-              onClick={() => item.path !== '#' && navigate(item.path)}
-              className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400 hover:text-red-600 transition-colors group"
-            >
-              <span className="group-hover:scale-110 transition-transform">{item.icon}</span>
-              {item.name}
-            </button>
-          ))}
-        </div>
-
-        <div className="w-24 flex justify-end">
-             <div className="h-1 w-1 bg-red-600 rounded-full animate-pulse" />
-        </div>
-      </motion.nav>
+      <Navbar />
 
       {/* --- MINIMALIST AMBIENCE --- */}
       <div className="absolute inset-0 pointer-events-none">
@@ -80,6 +29,7 @@ const LandingPage = ({ onSearchStart }) => {
 
       {/* --- CENTRAL CONTENT --- */}
       <div className="relative z-10 w-full max-w-5xl flex flex-col items-center px-6 mt-10">
+        {/* HERO IMAGE */}
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -133,7 +83,7 @@ const LandingPage = ({ onSearchStart }) => {
         </motion.div>
       </div>
 
-      {/* --- FOOTER DECORATION --- */}
+      {/* --- FOOTER --- */}
       <div className="absolute bottom-10 flex gap-12 text-zinc-600 text-[10px] font-black uppercase tracking-[0.4em]">
         <div className="flex items-center gap-2 italic"><Sparkles size={12} /> AI Driven</div>
         <div className="flex items-center gap-2 italic"><Sparkles size={12} /> Realtime</div>
