@@ -4,7 +4,6 @@ import {
   Youtube, 
   Compass, 
   Bot, 
-  Library, 
   UserCircle 
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -22,11 +21,10 @@ const Navbar = () => {
     return () => unsubscribe();
   }, []);
 
-  // Updated path for Ask AI to point to the new route
+  // Removed Library from this list
   const navItems = [
     { name: 'Explore', icon: <Compass size={16} />, path: '/explore' },
     { name: 'Ask AI', icon: <Bot size={16} />, path: '/ask-ai' },
-    { name: 'Library', icon: <Library size={16} />, path: '#' },
   ];
 
   return (
@@ -99,7 +97,6 @@ const Navbar = () => {
             onClick={() => item.path !== '#' && navigate(item.path)}
             className="flex flex-col items-center gap-1 text-[8px] font-black uppercase tracking-[0.1em] text-zinc-400 hover:text-red-600 transition-colors"
           >
-            {/* Using slightly larger icons for mobile for better touch experience */}
             {React.cloneElement(item.icon, { size: 20 })}
             <span>{item.name}</span>
           </button>
