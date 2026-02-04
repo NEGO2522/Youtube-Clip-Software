@@ -10,7 +10,10 @@ import Profile from './components/Profile';
 // Page Imports
 import LandingPage from './pages/Landing'; 
 import Explore from './pages/Explore';
-import AskAi from './pages/AskAI'; // Imported the new AskAI page
+import AskAi from './pages/AskAI';
+import PrivacyPolicy from './pages/PrivacyPolicy'; // Added
+import TermsOfService from './pages/TermsOfService'; // Added
+import ContactUs from './pages/ContactUs'; // Added
 
 // ResultsView kept for context
 const ResultsView = ({ query }) => {
@@ -56,6 +59,11 @@ const AnimatedRoutes = ({ activeQuery, setActiveQuery }) => {
           
           {/* Profile Route */}
           <Route path="/profile" element={<Profile />} />
+
+          {/* Legal & Support Routes */}
+          <Route path="/privacy" element={<PrivacyPolicy />} />
+          <Route path="/terms" element={<TermsOfService />} />
+          <Route path="/contact" element={<ContactUs />} />
           
           {/* Auth Routes */}
           <Route path="/login" element={<Login />} />

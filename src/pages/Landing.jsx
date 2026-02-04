@@ -12,7 +12,7 @@ import {
   Cpu,
   Database
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom'; // Added Link here
 import { auth } from '../firebase/firebase'; 
 import Navbar from '../components/Navbar';
 
@@ -169,7 +169,7 @@ const LandingPage = ({ onSearchStart }) => {
             </div>
           </motion.div>
 
-          {/* SEARCH CONSOLE - Adjusted mt-6 for mobile to prevent image overlap */}
+          {/* SEARCH CONSOLE */}
           <motion.div
             initial={{ opacity: 0, y: 40 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -291,10 +291,10 @@ const LandingPage = ({ onSearchStart }) => {
       <footer className="relative z-10 w-full border-t border-white/5 bg-[#050505] pt-16 md:pt-20 pb-10 px-6 md:px-10">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between gap-10 md:gap-12">
           <div className="space-y-6 text-center md:text-left">
-            <div className="flex items-center justify-center md:justify-start gap-2">
-              <Youtube className="text-red-600" fill="currentColor" size={24} />
+            <Link to="/" className="flex items-center justify-center md:justify-start gap-2 group">
+              <Youtube className="text-red-600 transition-transform group-hover:scale-110" fill="currentColor" size={24} />
               <span className="text-xl font-black uppercase tracking-tighter">Clupe</span>
-            </div>
+            </Link>
             <p className="max-w-xs mx-auto md:mx-0 text-zinc-500 text-[9px] md:text-[10px] font-bold uppercase tracking-widest leading-loose">
               The next generation of video intelligence. Extracting value from chaos.
             </p>
@@ -302,20 +302,22 @@ const LandingPage = ({ onSearchStart }) => {
           <div className="grid grid-cols-2 md:grid-cols-3 gap-8 md:gap-12 text-center md:text-left">
             <div className="flex flex-col gap-4">
               <h4 className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.3em] text-red-600">Legal</h4>
-              <button className="text-zinc-400 hover:text-white text-[9px] font-bold uppercase tracking-widest transition-colors">Privacy_Policy</button>
-              <button className="text-zinc-400 hover:text-white text-[9px] font-bold uppercase tracking-widest transition-colors">Terms_Of_Service</button>
+              <Link to="/privacy" className="text-zinc-400 hover:text-white text-[9px] font-bold uppercase tracking-widest transition-colors">Privacy_Policy</Link>
+              <Link to="/terms" className="text-zinc-400 hover:text-white text-[9px] font-bold uppercase tracking-widest transition-colors">Terms_Of_Service</Link>
             </div>
             <div className="flex flex-col gap-4">
               <h4 className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.3em] text-red-600">Support</h4>
-              <button className="text-zinc-400 hover:text-white text-[9px] font-bold uppercase tracking-widest transition-colors flex items-center justify-center md:justify-start gap-2"><Mail size={10} /> Contact_Us</button>
-              <button className="text-zinc-400 hover:text-white text-[9px] font-bold uppercase tracking-widest transition-colors">Help_Center</button>
+              <Link to="/contact" className="text-zinc-400 hover:text-white text-[9px] font-bold uppercase tracking-widest transition-colors flex items-center justify-center md:justify-start gap-2">
+                <Mail size={10} /> Contact_Us
+              </Link>
+              <Link to="/help" className="text-zinc-400 hover:text-white text-[9px] font-bold uppercase tracking-widest transition-colors">Help_Center</Link>
             </div>
           </div>
         </div>
         <div className="max-w-7xl mx-auto mt-16 md:mt-20 pt-10 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex flex-wrap justify-center gap-4 md:gap-8 text-zinc-700 text-[8px] font-black uppercase tracking-[0.4em]">
             <span className="flex items-center gap-1 italic text-red-600/50"><Sparkles size={8} /> AI Powered</span>
-            <span>© 2024 CLUPE_SYSTEMS</span>
+            <span>© 2026 CLUPE_SYSTEMS</span>
           </div>
           <div className="text-zinc-800 font-black text-[8px] uppercase tracking-[0.8em] text-center">
             SYSTEM_STATUS: OPERATIONAL
