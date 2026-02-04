@@ -1,8 +1,19 @@
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import { ChevronRight, Target, Sparkles, Youtube, Shield, Mail, Globe } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  ChevronRight, 
+  Target, 
+  Sparkles, 
+  Youtube, 
+  Shield, 
+  Mail, 
+  Globe, 
+  Zap, 
+  Cpu,
+  Database
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { auth } from '../firebase/firebase'; // Ensure this path is correct
+import { auth } from '../firebase/firebase'; 
 import Navbar from '../components/Navbar';
 
 const LandingPage = ({ onSearchStart }) => {
@@ -10,7 +21,98 @@ const LandingPage = ({ onSearchStart }) => {
   const [isFocused, setIsFocused] = useState(false);
   const navigate = useNavigate();
 
-  // Redirect logic if not signed in
+  // --- NEURAL PULSE SOUND SYNTHESIZER ---
+  const playPulseSound = () => {
+    const context = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = context.createOscillator();
+    const gainNode = context.createGain();
+
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(150, context.currentTime); // Low bass pulse
+    oscillator.frequency.exponentialRampToValueAtTime(40, context.currentTime + 0.1);
+
+    gainNode.gain.setValueAtTime(0.1, context.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, context.currentTime + 0.1);
+
+    oscillator.connect(gainNode);
+    gainNode.connect(context.destination);
+
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.1);
+  };
+
+  // --- TYPING ANIMATION LOGIC ---
+  const [placeholder, setPlaceholder] = useState("");
+  const [phraseIndex, setPhraseIndex] = useState(0);
+  const [isDeleting, setIsDeleting] = useState(false);
+  
+  const phrases = useMemo(() => [
+    "Describe a moment you want to find...",
+    "Search for the sunset scene in Malibu...",
+    "Find where the protagonist says 'Hello'...",
+    "Extract all shots of the red car...",
+    "Locate the high-speed chase sequence..."
+  ], []);
+
+  useEffect(() => {
+    const currentPhrase = phrases[phraseIndex];
+    const typeSpeed = isDeleting ? 30 : 70;
+
+    const timeout = setTimeout(() => {
+      if (!isDeleting && placeholder === currentPhrase) {
+        setTimeout(() => setIsDeleting(true), 2000);
+      } else if (isDeleting && placeholder === "") {
+        setIsDeleting(false);
+        setPhraseIndex((prev) => (prev + 1) % phrases.length);
+      } else {
+        const nextChar = isDeleting 
+          ? currentPhrase.substring(0, placeholder.length - 1)
+          : currentPhrase.substring(0, placeholder.length + 1);
+        setPlaceholder(nextChar);
+      }
+    }, typeSpeed);
+
+    return () => clearTimeout(timeout);
+  }, [placeholder, isDeleting, phraseIndex, phrases]);
+
+  // --- NEURAL STACK STATE ---
+  const [cards, setCards] = useState([
+    {
+      id: 1,
+      title: "INNOVATE",
+      subtitle: "Build the Future",
+      desc: "Access cutting-edge resources and AI frameworks to scale your vision.",
+      icon: <Sparkles size={32} className="text-white" />,
+      color: "from-red-600 to-orange-500"
+    },
+    {
+      id: 2,
+      title: "SYNTHESIZE",
+      subtitle: "Neural Logic",
+      desc: "Multi-layer processing that understands context, not just keywords.",
+      icon: <Cpu size={32} className="text-white" />,
+      color: "from-zinc-700 to-zinc-900"
+    },
+    {
+      id: 3,
+      title: "EXTRACT",
+      subtitle: "Data Mining",
+      desc: "Deep-seek algorithms that pull specific moments from hours of footage.",
+      icon: <Database size={32} className="text-white" />,
+      color: "from-red-900 to-black"
+    }
+  ]);
+
+  const rotateCards = () => {
+    playPulseSound(); // Trigger sound on click
+    setCards((prevCards) => {
+      const newCards = [...prevCards];
+      const firstCard = newCards.shift();
+      newCards.push(firstCard);
+      return newCards;
+    });
+  };
+
   const checkAuthAndExecute = (action) => {
     if (!auth.currentUser) {
       navigate('/login');
@@ -24,9 +126,7 @@ const LandingPage = ({ onSearchStart }) => {
     if (!query) return;
 
     checkAuthAndExecute(() => {
-      // Trigger the search start callback
       onSearchStart(query);
-      // Redirect to AskAi and pass the query in state
       navigate('/ask-ai', { state: { initialQuery: query } });
     });
   };
@@ -41,9 +141,7 @@ const LandingPage = ({ onSearchStart }) => {
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:50px_50px]" />
       </div>
 
-      {/* --- MAIN SECTION --- */}
       <main className="relative z-10 w-full flex flex-col items-center pt-32 pb-20 px-6">
-        
         {/* HERO IMAGE */}
         <div className="relative w-full max-w-5xl">
           <motion.div
@@ -81,10 +179,10 @@ const LandingPage = ({ onSearchStart }) => {
                 </div>
                 <input
                   type="text"
-                  placeholder="Describe a moment you want to find..."
+                  placeholder={placeholder}
                   onFocus={() => {
                     setIsFocused(true);
-                    if (!auth.currentUser) navigate('/login'); // Intercept on click
+                    if (!auth.currentUser) navigate('/login'); 
                   }}
                   onBlur={() => setIsFocused(false)}
                   className="w-full bg-transparent p-4 text-lg outline-none placeholder:text-zinc-700 font-bold"
@@ -99,7 +197,74 @@ const LandingPage = ({ onSearchStart }) => {
           </motion.div>
         </div>
 
-        {/* FEATURES GRID (FOR SCROLLABILITY) */}
+        {/* --- NEURAL STACK SECTION --- */}
+        <div className="mt-64 w-full max-w-7xl grid grid-cols-1 lg:grid-cols-2 gap-20 items-center px-4 mb-40">
+          <div className="space-y-8">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-red-500/30 bg-red-500/5 text-red-500 text-[10px] font-black uppercase tracking-[0.3em]">
+              <Zap size={12} fill="currentColor" /> Neural Core Active
+            </div>
+            <h3 className="text-4xl md:text-7xl font-black uppercase tracking-tighter italic leading-none">
+              Infinite <br /> <span className="text-red-600">Architecture.</span>
+            </h3>
+            <p className="text-zinc-500 text-sm font-bold uppercase tracking-[0.2em] leading-loose max-w-md">
+              Tap the stack to cycle through our neural processing layers. Every click reveals a deeper level of intelligence.
+            </p>
+          </div>
+
+          <div className="relative h-[600px] w-full flex items-center justify-center scale-100 md:scale-110">
+            <AnimatePresence mode="popLayout">
+              {cards.map((card, index) => {
+                const isFront = index === 0;
+                const isMiddle = index === 1;
+
+                return (
+                  <motion.div 
+                    key={card.id}
+                    layout
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ 
+                      x: isFront ? 0 : isMiddle ? 40 : 80, 
+                      y: isFront ? 0 : isMiddle ? -50 : -100,
+                      scale: isFront ? 1 : isMiddle ? 0.95 : 0.9,
+                      rotate: isFront ? -4 : isMiddle ? 2 : 8,
+                      zIndex: 30 - index,
+                      opacity: isFront ? 1 : isMiddle ? 0.7 : 0.4,
+                    }}
+                    transition={{ type: "spring", stiffness: 250, damping: 30 }}
+                    onClick={rotateCards}
+                    className={`absolute w-[380px] h-[380px] rounded-[3.5rem] p-10 flex flex-col items-center justify-center text-center cursor-pointer select-none transition-shadow duration-500
+                      ${isFront 
+                        ? 'bg-[#0d0d0d] border border-red-500/40 shadow-[0_30px_100px_rgba(220,38,38,0.25)] backdrop-blur-xl' 
+                        : 'bg-zinc-900/80 border border-white/5 shadow-2xl'
+                      }
+                    `}
+                  >
+                    <div className={`w-16 h-16 bg-gradient-to-t ${card.color} rounded-2xl flex items-center justify-center mb-6 shadow-xl`}>
+                      {card.icon}
+                    </div>
+                    <h4 className="text-3xl font-black tracking-[0.2em] uppercase mb-1 italic">{card.title}</h4>
+                    <div className="text-[10px] font-bold text-red-500 uppercase tracking-[0.4em] mb-4">{card.subtitle}</div>
+                    <p className="text-[11px] text-zinc-400 font-bold leading-relaxed uppercase tracking-wider">
+                      {card.desc}
+                    </p>
+                    
+                    {isFront && (
+                      <motion.div 
+                        animate={{ opacity: [0.3, 1, 0.3] }} 
+                        transition={{ repeat: Infinity, duration: 2 }}
+                        className="mt-6 text-[8px] font-black text-red-600 tracking-[0.5em]"
+                      >
+                        CLICK TO CYCLE
+                      </motion.div>
+                    )}
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
+          </div>
+        </div>
+
+        {/* FEATURES GRID */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-5xl mt-32 px-4">
           {[
             { icon: <Sparkles size={20} />, title: "AI Precision", desc: "Find exact timestamps instantly." },
@@ -118,7 +283,6 @@ const LandingPage = ({ onSearchStart }) => {
       {/* --- FOOTER --- */}
       <footer className="relative z-10 w-full border-t border-white/5 bg-[#050505] pt-20 pb-10 px-10">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between gap-12">
-          
           <div className="space-y-6">
             <div className="flex items-center gap-2">
               <Youtube className="text-red-600" fill="currentColor" size={24} />
@@ -128,7 +292,6 @@ const LandingPage = ({ onSearchStart }) => {
               The next generation of video intelligence. Extracting value from chaos.
             </p>
           </div>
-
           <div className="grid grid-cols-2 md:grid-cols-3 gap-12">
             <div className="flex flex-col gap-4">
               <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-red-600">Legal</h4>
@@ -142,7 +305,6 @@ const LandingPage = ({ onSearchStart }) => {
             </div>
           </div>
         </div>
-
         <div className="max-w-7xl mx-auto mt-20 pt-10 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex gap-8 text-zinc-700 text-[8px] font-black uppercase tracking-[0.4em]">
             <span className="flex items-center gap-1 italic text-red-600/50"><Sparkles size={8} /> AI Powered</span>
