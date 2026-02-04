@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 
@@ -11,9 +11,25 @@ import Profile from './components/Profile';
 import LandingPage from './pages/Landing'; 
 import Explore from './pages/Explore';
 import AskAi from './pages/AskAI';
-import PrivacyPolicy from './pages/PrivacyPolicy'; // Added
-import TermsOfService from './pages/TermsOfService'; // Added
-import ContactUs from './pages/ContactUs'; // Added
+import PrivacyPolicy from './pages/PrivacyPolicy'; 
+import TermsOfService from './pages/TermsOfService'; 
+import ContactUs from './pages/ContactUs'; 
+
+// --- SCROLL TO TOP LOGIC ---
+const ScrollToTop = () => {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    // This snaps the window to the top (0,0) instantly on route change
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: 'instant'
+    });
+  }, [pathname]);
+
+  return null;
+};
 
 // ResultsView kept for context
 const ResultsView = ({ query }) => {
@@ -82,6 +98,8 @@ function App() {
 
   return (
     <Router>
+      {/* ScrollToTop component ensures we start at the top of every new page */}
+      <ScrollToTop />
       <div className="App bg-[#020202] min-h-screen selection:bg-red-600/30">
         <AnimatedRoutes activeQuery={activeQuery} setActiveQuery={setActiveQuery} />
       </div>
