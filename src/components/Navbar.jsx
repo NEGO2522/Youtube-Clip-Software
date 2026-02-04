@@ -5,7 +5,8 @@ import {
   Compass, 
   Bot, 
   UserCircle,
-  Home // Added Home icon
+  Home,
+  User
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { onAuthStateChanged } from "firebase/auth"; 
@@ -22,7 +23,6 @@ const Navbar = () => {
     return () => unsubscribe();
   }, []);
 
-  // Added Home to the navigation items
   const navItems = [
     { name: 'Home', icon: <Home size={16} />, path: '/' },
     { name: 'Explore', icon: <Compass size={16} />, path: '/explore' },
@@ -31,7 +31,7 @@ const Navbar = () => {
 
   return (
     <>
-      {/* --- DESKTOP NAVBAR --- */}
+      {/* --- MAIN NAVBAR --- */}
       <motion.nav 
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -46,7 +46,7 @@ const Navbar = () => {
           <span className="text-sm font-black uppercase tracking-[0.3em] text-white">Clupe</span>
         </div>
 
-        {/* Navigation Items (Hidden on Mobile) */}
+        {/* Desktop Navigation Items (Hidden on Mobile) */}
         <div className="hidden md:flex items-center gap-8">
           {navItems.map((item) => (
             <button 
@@ -74,15 +74,29 @@ const Navbar = () => {
           ) : (
             <button 
               onClick={() => navigate('/login')}
-              className="px-4 py-1.5 bg-red-600 text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-full hover:bg-white hover:text-black transition-all cursor-pointer shadow-[0_0_15px_rgba(220,38,38,0.3)]"
+              className="px-4 py-1.5 bg-red-600 text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-full hover:bg-white hover:text-black transition-all cursor-pointer shadow-[0_0_15_rgba(220,38,38,0.3)]"
             >
               Join Now
             </button>
           )}
         </div>
 
-        {/* Status Indicator */}
-        <div className="w-24 flex justify-end">
+        {/* --- MOBILE ONLY TOP RIGHT PROFILE --- */}
+        <div className="flex md:hidden items-center gap-4">
+          <div className={`h-1.5 w-1.5 rounded-full animate-pulse ${user ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-red-600'}`} />
+          
+          <button 
+            onClick={() => user ? navigate('/profile') : navigate('/login')}
+            className={`p-2 rounded-xl border transition-all ${
+              user ? 'bg-zinc-900 border-white/10 text-white' : 'bg-red-600/10 border-red-600/50 text-red-600'
+            }`}
+          >
+            {user ? <User size={18} /> : <UserCircle size={18} />}
+          </button>
+        </div>
+
+        {/* Status Indicator (Desktop Only) */}
+        <div className="hidden md:flex w-24 justify-end">
              <div className={`h-1.5 w-1.5 rounded-full animate-pulse ${user ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-red-600'}`} />
         </div>
       </motion.nav>
@@ -103,24 +117,6 @@ const Navbar = () => {
             <span>{item.name}</span>
           </button>
         ))}
-        
-        {user ? (
-          <button 
-            onClick={() => navigate('/profile')}
-            className="flex flex-col items-center gap-1 text-[8px] font-black uppercase tracking-[0.1em] text-zinc-400"
-          >
-            <UserCircle size={20} />
-            <span>Profile</span>
-          </button>
-        ) : (
-          <button 
-            onClick={() => navigate('/login')}
-            className="flex flex-col items-center gap-1 text-[8px] font-black uppercase tracking-[0.1em] text-red-600"
-          >
-            <UserCircle size={20} />
-            <span>Login</span>
-          </button>
-        )}
       </motion.div>
     </>
   );
