@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Sparkles, Bot, User, Youtube, Zap, X, Terminal, Mic, Cpu, Globe, Shield, Loader2 } from 'lucide-react';
+import { Send, Sparkles, Bot, User, Youtube, Zap, X, Terminal, Mic, Cpu, Globe, Shield, Loader2, List, Activity, HardDrive, Hash } from 'lucide-react';
 
 const YOUTUBE_API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY;
 
@@ -8,6 +8,8 @@ const AskAi = () => {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState([]);
   const [activeVideo, setActiveVideo] = useState(null);
+  const [startTime, setStartTime] = useState(0); 
+  const [chapters, setChapters] = useState([]);
   const [isTyping, setIsTyping] = useState(false);
   const [isVideoLoading, setIsVideoLoading] = useState(false);
   const scrollRef = useRef(null);
@@ -18,13 +20,44 @@ const AskAi = () => {
     }
   }, [messages, isTyping]);
 
+  const parseTimestamp = (text) => {
+    const timeMatch = text.match(/(\d+):(\d+):?(\d+)?/);
+    if (!timeMatch) return 0;
+    const parts = timeMatch[0].split(':').map(Number);
+    if (parts.length === 3) return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
+    if (parts.length === 2) return (parts[0] * 60) + parts[1];
+    return 0;
+  };
+
+  const extractChapters = (description) => {
+    const lines = description.split('\n');
+    const detected = [];
+    const timeRegex = /(\d{1,2}:\d{2}(?::\d{2})?)/;
+    lines.forEach(line => {
+      const match = line.match(timeRegex);
+      if (match) {
+        const timeStr = match[1];
+        const label = line.replace(timeStr, '').replace(/[-—:]/g, '').trim();
+        if (label) detected.push({ time: parseTimestamp(timeStr), label, raw: timeStr });
+      }
+    });
+    return detected.slice(0, 15);
+  };
+
   const searchYouTube = async (query) => {
     try {
-      const response = await fetch(
-        `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=1&q=${encodeURIComponent(query)}&type=video&key=${YOUTUBE_API_KEY}`
+      const searchRes = await fetch(
+        `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=1&q=${encodeURIComponent(query)}&type=video&videoEmbeddable=true&key=${YOUTUBE_API_KEY}`
       );
-      const data = await response.json();
-      return data.items[0] ? data.items[0].id.videoId : null;
+      const searchData = await searchRes.json();
+      const videoId = searchData.items[0]?.id?.videoId;
+      if (!videoId) return null;
+      const detailRes = await fetch(
+        `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${YOUTUBE_API_KEY}`
+      );
+      const detailData = await detailRes.json();
+      const description = detailData.items[0]?.snippet?.description || "";
+      return { videoId, chapters: extractChapters(description) };
     } catch (error) { 
       console.error("YT Error:", error);
       return null; 
@@ -34,33 +67,30 @@ const AskAi = () => {
   const handleSend = async (e) => {
     e.preventDefault();
     if (!input.trim()) return;
-
     const userQuery = input;
     setMessages(prev => [...prev, { role: 'user', content: userQuery }]);
     setInput("");
     setIsTyping(true);
-
-    // ALWAYS trigger video search now
+    const detectedStartTime = parseTimestamp(userQuery);
+    setStartTime(detectedStartTime);
     setActiveVideo(null); 
+    setChapters([]);
     setIsVideoLoading(true);
-    
-    const videoId = await searchYouTube(userQuery);
-    
-    // Aesthetic delay for "Neural Link" sync
+    const data = await searchYouTube(userQuery);
     setTimeout(() => {
       setIsTyping(false);
       setIsVideoLoading(false);
-      
-      if (videoId) {
-        setActiveVideo(videoId);
+      if (data) {
+        setActiveVideo(data.videoId);
+        setChapters(data.chapters);
         setMessages(prev => [...prev, { 
           role: 'assistant', 
-          content: `Visual uplink locked. Synchronizing stream for "${userQuery}".`,
+          content: `Visual uplink locked. Found ${data.chapters.length} segments in stream.`,
         }]);
       } else {
         setMessages(prev => [...prev, { 
           role: 'assistant', 
-          content: "Critical Error: Could not establish stable video uplink for this query.",
+          content: "Critical Error: Could not establish stable video uplink.",
         }]);
       }
     }, 1500);
@@ -69,7 +99,6 @@ const AskAi = () => {
   return (
     <div className="h-screen w-full bg-[#020202] text-zinc-400 flex flex-col lg:flex-row overflow-hidden font-mono p-4 gap-4 selection:bg-red-500/30">
       
-      {/* Background Decor */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden opacity-30">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-red-600/20 blur-[120px] rounded-full" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-600/10 blur-[120px] rounded-full" />
@@ -82,72 +111,105 @@ const AskAi = () => {
             <div className="flex items-center gap-2">
               <Cpu size={14} className={isVideoLoading ? "text-red-500 animate-spin" : "text-red-500"} />
               <span className="text-[10px] font-bold uppercase tracking-widest text-white">
-                {isVideoLoading ? "Establishing Feed..." : "Core: Online"}
+                {isVideoLoading ? "Deep-Scanning Media..." : "Core: Online"}
               </span>
             </div>
-            <div className="flex items-center gap-2 text-zinc-600">
-              <Globe size={14} />
-              <span className="text-[10px] font-bold uppercase tracking-widest">Global Link Active</span>
-            </div>
+            {activeVideo && (
+              <div className="flex items-center gap-2 text-red-500 animate-pulse">
+                <Activity size={12} />
+                <span className="text-[10px] font-bold uppercase tracking-widest">Live Flux: Stable</span>
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="flex-1 bg-white/[0.02] border border-white/5 rounded-3xl relative overflow-hidden backdrop-blur-sm shadow-2xl">
-          <AnimatePresence mode="wait">
-            {isVideoLoading ? (
-              <motion.div 
-                key="loader"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="w-full h-full flex flex-col items-center justify-center bg-black/60 relative z-50"
-              >
-                <div className="relative">
-                  <motion.div 
-                    animate={{ rotate: 360 }}
-                    transition={{ repeat: Infinity, duration: 3, ease: "linear" }}
-                    className="w-32 h-32 border-2 border-red-500/10 border-t-red-500 rounded-full shadow-[0_0_15px_rgba(239,68,68,0.2)]"
-                  />
-                  <div className="absolute inset-0 flex items-center justify-center">
+        <div className="flex-1 bg-white/[0.02] border border-white/5 rounded-3xl relative overflow-hidden backdrop-blur-sm shadow-2xl flex flex-col">
+          <div className="flex-1 relative">
+            <AnimatePresence mode="wait">
+              {isVideoLoading ? (
+                <motion.div key="loader" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full h-full flex flex-col items-center justify-center bg-black/60 relative z-50">
+                  <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 3, ease: "linear" }} className="w-32 h-32 border-2 border-red-500/10 border-t-red-500 rounded-full flex items-center justify-center">
                     <Loader2 size={24} className="text-red-500 animate-spin" />
+                  </motion.div>
+                  <span className="mt-6 text-[10px] font-black tracking-[0.4em] text-red-500 animate-pulse uppercase">Segment Extraction</span>
+                </motion.div>
+              ) : activeVideo ? (
+                <motion.div key="video" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="w-full h-full flex flex-col relative">
+                  <div className="absolute top-4 left-4 z-20 flex gap-2">
+                    <div className="bg-red-600 px-3 py-1 rounded text-[10px] text-white font-black">
+                      {startTime > 0 ? `OFFSET: ${startTime}s` : 'LIVE_FEED'}
+                    </div>
+                    <button onClick={() => setActiveVideo(null)} className="bg-black/80 hover:bg-red-600 p-1.5 rounded transition-all text-white border border-white/10">
+                      <X size={14} />
+                    </button>
                   </div>
+                  <iframe
+                    width="100%" height="100%"
+                    src={`https://www.youtube-nocookie.com/embed/${activeVideo}?autoplay=1&start=${startTime}&modestbranding=1`}
+                    frameBorder="0" allow="autoplay; encrypted-media" allowFullScreen
+                  />
+                </motion.div>
+              ) : (
+                /* --- DEFAULT STATE: SYSTEM DASHBOARD --- */
+                <motion.div key="dashboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full h-full p-8 flex flex-col">
+                  <div className="flex items-center justify-between mb-8 border-b border-white/5 pb-4">
+                    <div className="flex flex-col">
+                      <h3 className="text-white text-xs font-black tracking-widest uppercase">System Diagnostics</h3>
+                      <p className="text-[9px] text-zinc-600 mt-1 uppercase">Node: RAMCHANDPURA_REDACTED // Status: Ready</p>
+                    </div>
+                    <Shield size={20} className="text-red-500/20" />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 mb-8">
+                    <div className="p-4 bg-white/[0.03] border border-white/5 rounded-2xl">
+                      <HardDrive size={14} className="text-red-500 mb-2" />
+                      <div className="text-[10px] font-bold text-zinc-500 uppercase">Buffer Memory</div>
+                      <div className="text-lg font-black text-white italic">94.2%</div>
+                    </div>
+                    <div className="p-4 bg-white/[0.03] border border-white/5 rounded-2xl">
+                      <Globe size={14} className="text-blue-500 mb-2" />
+                      <div className="text-[10px] font-bold text-zinc-500 uppercase">Neural Latency</div>
+                      <div className="text-lg font-black text-white italic">14ms</div>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 bg-black/40 rounded-2xl border border-white/5 p-4 font-mono overflow-hidden relative">
+                    <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none bg-[repeating-linear-gradient(0deg,transparent,transparent_2px,rgba(255,255,255,0.1)_3px)]" />
+                    <div className="flex items-center gap-2 mb-3 text-red-500/50">
+                      <Terminal size={12} />
+                      <span className="text-[9px] uppercase font-bold tracking-widest">Access Logs</span>
+                    </div>
+                    <div className="space-y-2 text-[9px] leading-tight text-zinc-500">
+                      <p className="flex gap-2"><span className="text-red-900">[OK]</span> Initializing core kernel...</p>
+                      <p className="flex gap-2"><span className="text-red-900">[OK]</span> Encrypted tunnel established.</p>
+                      <p className="flex gap-2"><span className="text-zinc-700"> [..]</span> Awaiting user input parameters...</p>
+                      <p className="flex gap-2 animate-pulse"><span className="text-red-500">&gt;</span> SYSTEM_STANDBY_MODE_ACTIVE</p>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          <AnimatePresence>
+            {chapters.length > 0 && !isVideoLoading && (
+              <motion.div initial={{ height: 0 }} animate={{ height: '140px' }} exit={{ height: 0 }} className="border-t border-white/10 bg-black/40 p-4 overflow-hidden">
+                <div className="flex items-center gap-2 mb-3">
+                  <List size={12} className="text-red-500" />
+                  <span className="text-[9px] font-bold uppercase tracking-tighter text-zinc-500">Temporal Index Scanned</span>
                 </div>
-                <div className="mt-6 flex flex-col items-center gap-1">
-                  <span className="text-[10px] font-black tracking-[0.4em] text-red-500 animate-pulse">ANALYZING SIGNAL</span>
-                  <span className="text-[8px] text-zinc-700 font-mono uppercase tracking-widest">Bypassing encryption nodes...</span>
+                <div className="flex gap-3 overflow-x-auto pb-2 custom-scrollbar">
+                  {chapters.map((ch, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setStartTime(ch.time)}
+                      className="flex-shrink-0 px-4 py-2 bg-white/5 border border-white/10 rounded-xl hover:bg-red-600/20 hover:border-red-500 transition-all text-left max-w-[160px]"
+                    >
+                      <div className="text-red-500 text-[9px] font-mono mb-1">{ch.raw}</div>
+                      <div className="text-white text-[10px] truncate font-bold">{ch.label}</div>
+                    </button>
+                  ))}
                 </div>
-              </motion.div>
-            ) : activeVideo ? (
-              <motion.div 
-                key="video"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="w-full h-full flex flex-col relative"
-              >
-                <div className="absolute top-4 left-4 z-20 flex gap-2">
-                  <div className="bg-red-600 px-3 py-1 rounded text-[10px] text-white font-black animate-pulse">DATA_STREAM: LIVE</div>
-                  <button onClick={() => setActiveVideo(null)} className="bg-black/80 hover:bg-red-600 p-1.5 rounded transition-all text-white border border-white/10 backdrop-blur-md">
-                    <X size={14} />
-                  </button>
-                </div>
-                <iframe
-                  width="100%" height="100%"
-                  src={`https://www.youtube-nocookie.com/embed/${activeVideo}?autoplay=1&modestbranding=1`}
-                  frameBorder="0" allow="autoplay; encrypted-media" allowFullScreen
-                  className="grayscale hover:grayscale-0 transition-all duration-1000"
-                />
-              </motion.div>
-            ) : (
-              <motion.div 
-                key="idle"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="w-full h-full flex flex-col items-center justify-center"
-              >
-                <div className="w-16 h-16 rounded-full border border-zinc-900 flex items-center justify-center">
-                   <Terminal size={24} className="text-zinc-800" />
-                </div>
-                <p className="mt-4 text-[9px] tracking-[0.6em] uppercase font-black text-zinc-800">No stream detected</p>
               </motion.div>
             )}
           </AnimatePresence>
@@ -159,18 +221,18 @@ const AskAi = () => {
         <div className="p-6 border-b border-white/5 flex items-center justify-between bg-black/40">
            <div className="flex items-center gap-3">
               <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_10px_#ef4444]" />
-              <span className="text-[11px] font-black tracking-[0.2em] text-white uppercase">Neural_Uplink_v2</span>
+              <span className="text-[11px] font-black tracking-[0.2em] text-white uppercase">Neural_Uplink_v3.0</span>
            </div>
-           <Shield size={16} className="text-zinc-700" />
+           <Hash size={16} className="text-zinc-700" />
         </div>
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
           {messages.length === 0 && (
             <div className="h-full flex flex-col justify-end pb-12">
               <Sparkles className="text-red-600 mb-4" size={24} />
-              <h2 className="text-2xl font-black text-white mb-2 tracking-tighter uppercase italic">System Ready.</h2>
-              <p className="text-[11px] text-zinc-600 leading-relaxed max-w-[220px] font-bold uppercase">
-                Input any topic. Interface will auto-locate relevant visual data.
+              <h2 className="text-2xl font-black text-white mb-2 tracking-tighter uppercase italic">Initialized.</h2>
+              <p className="text-[11px] text-zinc-600 leading-relaxed max-w-[250px] font-bold uppercase">
+                Search for a topic. The system will auto-extract chapters for quick navigation.
               </p>
             </div>
           )}
@@ -197,14 +259,11 @@ const AskAi = () => {
               </motion.div>
             ))}
           </AnimatePresence>
-          {isTyping && <div className="text-[9px] text-red-500 animate-pulse font-black tracking-[0.3em] px-2 italic uppercase">Synchronizing...</div>}
+          {isTyping && <div className="text-[9px] text-red-500 animate-pulse font-black tracking-[0.3em] px-2 italic uppercase text-center">Rerouting Data...</div>}
         </div>
 
         <div className="p-6 bg-black/40">
-          <form 
-            onSubmit={handleSend}
-            className="flex items-center gap-3 bg-white/[0.02] border border-white/10 rounded-2xl p-2 pr-3 focus-within:border-red-500/50 transition-all shadow-inner"
-          >
+          <form onSubmit={handleSend} className="flex items-center gap-3 bg-white/[0.02] border border-white/10 rounded-2xl p-2 pr-3 focus-within:border-red-500/50 transition-all">
             <input 
               type="text"
               placeholder="Query any topic..."
@@ -214,15 +273,11 @@ const AskAi = () => {
             />
             <button 
               disabled={!input.trim() || isVideoLoading}
-              className="w-10 h-10 bg-red-600 text-white rounded-xl flex items-center justify-center hover:bg-white hover:text-black transition-all duration-300 disabled:opacity-10 shadow-[0_0_20px_rgba(220,38,38,0.2)]"
+              className="w-10 h-10 bg-red-600 text-white rounded-xl flex items-center justify-center hover:bg-white hover:text-black transition-all duration-300 disabled:opacity-10"
             >
               <Send size={16} />
             </button>
           </form>
-          <div className="mt-4 flex justify-between text-[8px] font-black uppercase tracking-[0.3em] text-zinc-800">
-             <span>Security: E2E</span>
-             <span>Link: Stable</span>
-          </div>
         </div>
       </section>
     </div>
