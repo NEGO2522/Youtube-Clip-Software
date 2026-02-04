@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Sparkles, Bot, User, Youtube, Zap, X, Terminal, Mic, Cpu, Globe, Shield, Loader2, List, Activity, HardDrive, Hash } from 'lucide-react';
+import { useLocation } from 'react-router-dom'; // Import useLocation
 
 const YOUTUBE_API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY;
 
@@ -13,12 +14,24 @@ const AskAi = () => {
   const [isTyping, setIsTyping] = useState(false);
   const [isVideoLoading, setIsVideoLoading] = useState(false);
   const scrollRef = useRef(null);
+  
+  const location = useLocation(); // Hook to catch the state
+  const hasInitialized = useRef(false); // To prevent double-triggering in development
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, isTyping]);
+
+  // NEW: Handle incoming query from Landing Page
+  useEffect(() => {
+    if (location.state?.initialQuery && !hasInitialized.current) {
+      const query = location.state.initialQuery;
+      performSearch(query);
+      hasInitialized.current = true;
+    }
+  }, [location.state]);
 
   const parseTimestamp = (text) => {
     const timeMatch = text.match(/(\d+):(\d+):?(\d+)?/);
@@ -64,19 +77,18 @@ const AskAi = () => {
     }
   };
 
-  const handleSend = async (e) => {
-    e.preventDefault();
-    if (!input.trim()) return;
-    const userQuery = input;
-    setMessages(prev => [...prev, { role: 'user', content: userQuery }]);
-    setInput("");
+  // Logic extracted into a reusable function
+  const performSearch = async (query) => {
+    setMessages(prev => [...prev, { role: 'user', content: query }]);
     setIsTyping(true);
-    const detectedStartTime = parseTimestamp(userQuery);
+    const detectedStartTime = parseTimestamp(query);
     setStartTime(detectedStartTime);
     setActiveVideo(null); 
     setChapters([]);
     setIsVideoLoading(true);
-    const data = await searchYouTube(userQuery);
+    
+    const data = await searchYouTube(query);
+    
     setTimeout(() => {
       setIsTyping(false);
       setIsVideoLoading(false);
@@ -94,6 +106,13 @@ const AskAi = () => {
         }]);
       }
     }, 1500);
+  };
+
+  const handleSend = (e) => {
+    e.preventDefault();
+    if (!input.trim()) return;
+    performSearch(input);
+    setInput("");
   };
 
   return (
@@ -150,7 +169,6 @@ const AskAi = () => {
                   />
                 </motion.div>
               ) : (
-                /* --- DEFAULT STATE: SYSTEM DASHBOARD --- */
                 <motion.div key="dashboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full h-full p-8 flex flex-col">
                   <div className="flex items-center justify-between mb-8 border-b border-white/5 pb-4">
                     <div className="flex flex-col">
@@ -272,6 +290,7 @@ const AskAi = () => {
               className="flex-1 bg-transparent border-none outline-none text-[13px] py-3 px-4 text-white placeholder:text-zinc-800 font-mono tracking-tight"
             />
             <button 
+              type="submit"
               disabled={!input.trim() || isVideoLoading}
               className="w-10 h-10 bg-red-600 text-white rounded-xl flex items-center justify-center hover:bg-white hover:text-black transition-all duration-300 disabled:opacity-10"
             >

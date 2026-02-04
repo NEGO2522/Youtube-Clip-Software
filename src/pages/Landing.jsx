@@ -24,8 +24,10 @@ const LandingPage = ({ onSearchStart }) => {
     if (!query) return;
 
     checkAuthAndExecute(() => {
+      // Trigger the search start callback
       onSearchStart(query);
-      navigate('/results');
+      // Redirect to AskAi and pass the query in state
+      navigate('/ask-ai', { state: { initialQuery: query } });
     });
   };
 

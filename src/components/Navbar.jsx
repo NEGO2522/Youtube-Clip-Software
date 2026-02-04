@@ -4,7 +4,8 @@ import {
   Youtube, 
   Compass, 
   Bot, 
-  UserCircle 
+  UserCircle,
+  Home // Added Home icon
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { onAuthStateChanged } from "firebase/auth"; 
@@ -21,8 +22,9 @@ const Navbar = () => {
     return () => unsubscribe();
   }, []);
 
-  // Removed Library from this list
+  // Added Home to the navigation items
   const navItems = [
+    { name: 'Home', icon: <Home size={16} />, path: '/' },
     { name: 'Explore', icon: <Compass size={16} />, path: '/explore' },
     { name: 'Ask AI', icon: <Bot size={16} />, path: '/ask-ai' },
   ];
