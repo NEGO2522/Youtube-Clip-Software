@@ -1,304 +1,703 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Sparkles, Bot, User, Youtube, Zap, X, Terminal, Mic, Cpu, Globe, Shield, Loader2, List, Activity, HardDrive, Hash } from 'lucide-react';
-import { useLocation } from 'react-router-dom'; // Import useLocation
+import {
+  Send, Zap, Loader2, Play, ArrowLeft, Copy,
+  Check, ExternalLink, AlertCircle, Scissors,
+  Search, X, Film, MessageSquare, Youtube,
+} from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import Navbar from '../components/Navbar';
 
-const YOUTUBE_API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY;
+const YT_KEY = import.meta.env.VITE_YOUTUBE_API_KEY;
 
-const AskAi = () => {
-  const [input, setInput] = useState("");
-  const [messages, setMessages] = useState([]);
-  const [activeVideo, setActiveVideo] = useState(null);
-  const [startTime, setStartTime] = useState(0); 
-  const [chapters, setChapters] = useState([]);
-  const [isTyping, setIsTyping] = useState(false);
-  const [isVideoLoading, setIsVideoLoading] = useState(false);
-  const scrollRef = useRef(null);
-  
-  const location = useLocation(); // Hook to catch the state
-  const hasInitialized = useRef(false); // To prevent double-triggering in development
+/* ─────────────────────────────────────────────
+   Helpers
+───────────────────────────────────────────── */
+const toSeconds = (ts) => {
+  if (!ts) return 0;
+  const parts = String(ts).split(':').map(Number);
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  return parts[0] || 0;
+};
 
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+const parseChapters = (description) => {
+  if (!description) return [];
+  const timeRegex = /(\d{1,2}:\d{2}(?::\d{2})?)/;
+  return description.split('\n').reduce((acc, line) => {
+    const match = line.match(timeRegex);
+    if (match) {
+      const raw = match[1];
+      const label = line.replace(raw, '').replace(/^[\s\-–—:]+|[\s\-–—:]+$/g, '').trim();
+      if (label.length > 1) acc.push({ raw, seconds: toSeconds(raw), label });
     }
-  }, [messages, isTyping]);
+    return acc;
+  }, []);
+};
 
-  // NEW: Handle incoming query from Landing Page
-  useEffect(() => {
-    if (location.state?.initialQuery && !hasInitialized.current) {
-      const query = location.state.initialQuery;
-      performSearch(query);
-      hasInitialized.current = true;
-    }
-  }, [location.state]);
+/* ─────────────────────────────────────────────
+   Fetch ALL videos of a channel via playlist API
+   Pages through until no nextPageToken
+───────────────────────────────────────────── */
+const fetchAllChannelVideos = async (channelId, onProgress) => {
+  const uploadsPlaylistId = 'UU' + channelId.slice(2);
+  let pageToken = null;
+  let allVideos = [];
+  let page = 0;
 
-  const parseTimestamp = (text) => {
-    const timeMatch = text.match(/(\d+):(\d+):?(\d+)?/);
-    if (!timeMatch) return 0;
-    const parts = timeMatch[0].split(':').map(Number);
-    if (parts.length === 3) return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
-    if (parts.length === 2) return (parts[0] * 60) + parts[1];
-    return 0;
-  };
-
-  const extractChapters = (description) => {
-    const lines = description.split('\n');
-    const detected = [];
-    const timeRegex = /(\d{1,2}:\d{2}(?::\d{2})?)/;
-    lines.forEach(line => {
-      const match = line.match(timeRegex);
-      if (match) {
-        const timeStr = match[1];
-        const label = line.replace(timeStr, '').replace(/[-—:]/g, '').trim();
-        if (label) detected.push({ time: parseTimestamp(timeStr), label, raw: timeStr });
-      }
+  do {
+    page++;
+    const params = new URLSearchParams({
+      part: 'snippet',
+      playlistId: uploadsPlaylistId,
+      maxResults: 50,
+      key: YT_KEY,
+      ...(pageToken ? { pageToken } : {}),
     });
-    return detected.slice(0, 15);
+
+    const res = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?${params}`);
+    const data = await res.json();
+
+    if (!data.items?.length) break;
+
+    // Fetch video details (thumbnail, duration) in one batch
+    const ids = data.items.map(i => i.snippet.resourceId.videoId).join(',');
+    const detailRes = await fetch(
+      `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&id=${ids}&key=${YT_KEY}`
+    );
+    const detailData = await detailRes.json();
+
+    const batch = (detailData.items || []).map(v => {
+      const iso = v.contentDetails?.duration || '';
+      const match = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+      const h = parseInt(match?.[1] || 0), m = parseInt(match?.[2] || 0), s = parseInt(match?.[3] || 0);
+      const duration = h > 0
+        ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+        : `${m}:${String(s).padStart(2,'0')}`;
+      return {
+        id: v.id,
+        title: v.snippet.title,
+        thumbnail: v.snippet.thumbnails?.high?.url || v.snippet.thumbnails?.medium?.url || '',
+        description: v.snippet.description || '',
+        publishedAt: v.snippet.publishedAt,
+        duration,
+      };
+    });
+
+    allVideos = [...allVideos, ...batch];
+    pageToken = data.nextPageToken || null;
+
+    if (onProgress) onProgress(allVideos.length, pageToken != null);
+  } while (pageToken);
+
+  return allVideos;
+};
+
+/* Fetch full descriptions for a list of video IDs */
+const fetchFullDescriptions = async (videoIds) => {
+  if (!videoIds.length) return {};
+  const res = await fetch(
+    `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoIds.join(',')}&key=${YT_KEY}`
+  );
+  const data = await res.json();
+  const map = {};
+  (data.items || []).forEach(v => { map[v.id] = v.snippet.description || ''; });
+  return map;
+};
+
+/* ─────────────────────────────────────────────
+   Rich text renderer
+───────────────────────────────────────────── */
+const InlineBold = ({ text }) => {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return (
+    <>
+      {parts.map((p, i) =>
+        p.startsWith('**') && p.endsWith('**')
+          ? <strong key={i} className="text-white font-semibold">{p.slice(2, -2)}</strong>
+          : <span key={i}>{p}</span>
+      )}
+    </>
+  );
+};
+
+const RichText = ({ text }) => {
+  if (!text) return null;
+  return (
+    <div className="space-y-2">
+      {text.split('\n').filter(l => l.trim()).map((line, i) => {
+        const t = line.trim();
+        if (t.startsWith('- ') || t.startsWith('• '))
+          return (
+            <div key={i} className="flex gap-2.5 items-start">
+              <span className="shrink-0 mt-[6px] w-1.5 h-1.5 rounded-full bg-red-500/60" />
+              <p className="text-zinc-300 text-[13px] leading-relaxed"><InlineBold text={t.replace(/^[-•]\s+/, '')} /></p>
+            </div>
+          );
+        if (t.startsWith('#'))
+          return <p key={i} className="text-white text-[13px] font-black uppercase tracking-wide mt-2">{t.replace(/^#+\s*/, '')}</p>;
+        return <p key={i} className="text-zinc-300 text-[13px] leading-relaxed"><InlineBold text={t} /></p>;
+      })}
+    </div>
+  );
+};
+
+/* ─────────────────────────────────────────────
+   Clip Card
+───────────────────────────────────────────── */
+const ClipCard = ({ clip, onPlay, isPlaying }) => {
+  const [copied, setCopied] = useState(false);
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+      className={`group rounded-2xl border overflow-hidden transition-all duration-300 cursor-pointer ${
+        isPlaying
+          ? 'border-red-500/60 bg-red-500/[0.05] shadow-[0_0_24px_rgba(220,38,38,0.15)]'
+          : 'border-white/[0.08] bg-white/[0.025] hover:border-red-500/30 hover:bg-white/[0.04]'
+      }`}
+      onClick={() => onPlay(clip)}
+    >
+      <div className="relative aspect-video overflow-hidden bg-zinc-900">
+        {clip.thumbnail
+          ? <img src={clip.thumbnail} alt={clip.videoTitle} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-75" loading="lazy" />
+          : <div className="w-full h-full flex items-center justify-center"><Film size={20} className="text-zinc-700" /></div>
+        }
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+        <div className="absolute bottom-2 left-2 flex items-center gap-1 px-2 py-1 rounded-lg bg-red-600 text-white font-mono text-[10px] font-black shadow-lg">
+          <Play size={8} fill="white" />{clip.timestamp}
+        </div>
+        {isPlaying && (
+          <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-0.5 rounded-lg bg-red-600 text-white text-[9px] font-black uppercase">
+            <span className="w-1 h-1 rounded-full bg-white animate-ping" />Playing
+          </div>
+        )}
+        {!isPlaying && (
+          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="w-10 h-10 rounded-full bg-red-600/90 flex items-center justify-center shadow-xl">
+              <Play size={16} fill="white" className="ml-0.5" />
+            </div>
+          </div>
+        )}
+      </div>
+      <div className="px-3 pt-2.5 pb-3">
+        <p className="text-red-400/70 text-[9px] font-black uppercase tracking-widest truncate mb-1">{clip.videoTitle}</p>
+        <p className="text-white text-[12px] font-semibold leading-snug line-clamp-2 mb-1">{clip.label}</p>
+        {clip.reason && <p className="text-zinc-500 text-[11px] leading-relaxed line-clamp-2 mb-2">{clip.reason}</p>}
+        <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+          <button onClick={() => { navigator.clipboard.writeText(`https://youtube.com/watch?v=${clip.videoId}&t=${clip.seconds}`); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+            className="p-1.5 rounded-lg bg-white/[0.04] border border-white/[0.07] text-zinc-500 hover:text-white transition-all">
+            {copied ? <Check size={11} className="text-green-400" /> : <Copy size={11} />}
+          </button>
+          <a href={`https://youtube.com/watch?v=${clip.videoId}&t=${clip.seconds}`} target="_blank" rel="noopener noreferrer"
+            className="p-1.5 rounded-lg bg-white/[0.04] border border-white/[0.07] text-zinc-500 hover:text-white transition-all">
+            <ExternalLink size={11} />
+          </a>
+          <span className="ml-auto text-zinc-700 font-mono text-[10px]">{clip.timestamp}</span>
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
+/* ─────────────────────────────────────────────
+   Inline Player
+───────────────────────────────────────────── */
+const InlinePlayer = ({ clip, onClose }) => (
+  <motion.div
+    initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+    className="rounded-2xl overflow-hidden border border-red-500/30 bg-black shadow-[0_16px_48px_rgba(0,0,0,0.7)]"
+  >
+    <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-[#111] border-b border-white/[0.06]">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0" />
+        <p className="text-white text-[12px] font-semibold truncate">{clip.videoTitle}</p>
+        <span className="shrink-0 px-2 py-0.5 rounded bg-red-600/20 border border-red-500/30 text-red-400 font-mono text-[10px] font-black">{clip.timestamp}</span>
+      </div>
+      <div className="flex items-center gap-1.5 shrink-0">
+        <a href={`https://youtube.com/watch?v=${clip.videoId}&t=${clip.seconds}`} target="_blank" rel="noopener noreferrer"
+          className="p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-white/10 transition-all"><ExternalLink size={13} /></a>
+        <button onClick={onClose} className="p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-white/10 transition-all"><X size={13} /></button>
+      </div>
+    </div>
+    <div className="relative" style={{ aspectRatio: '16/9' }}>
+      <iframe
+        key={`${clip.videoId}-${clip.seconds}`}
+        width="100%" height="100%"
+        src={`https://www.youtube-nocookie.com/embed/${clip.videoId}?autoplay=1&start=${clip.seconds}&modestbranding=1&rel=0&fs=1`}
+        frameBorder="0" allow="autoplay; encrypted-media; fullscreen" allowFullScreen
+        className="absolute inset-0 w-full h-full"
+      />
+    </div>
+    {clip.reason && (
+      <div className="px-4 py-2.5 bg-[#111] border-t border-white/[0.05]">
+        <p className="text-zinc-500 text-[11px]"><span className="text-red-400 font-semibold">Why: </span>{clip.reason}</p>
+      </div>
+    )}
+  </motion.div>
+);
+
+/* ─────────────────────────────────────────────
+   Loading screen shown while indexing all videos
+───────────────────────────────────────────── */
+const IndexingScreen = ({ count, total, channelName, channelAvatar }) => (
+  <div className="flex flex-col items-center justify-center h-full gap-8 text-center px-8">
+    <div className="relative w-20 h-20">
+      <div className="absolute inset-0 rounded-full border-2 border-red-500/20" />
+      <div className="absolute inset-0 rounded-full border-t-2 border-red-500 animate-spin" />
+      {channelAvatar
+        ? <img src={channelAvatar} alt={channelName} className="absolute inset-2 rounded-full object-cover" />
+        : <Youtube size={28} className="absolute inset-0 m-auto text-red-500" fill="currentColor" />
+      }
+    </div>
+    <div>
+      <p className="text-white text-xl font-black uppercase tracking-tight mb-2">Indexing Channel</p>
+      <p className="text-zinc-500 text-sm mb-4">Fetching all videos from <span className="text-white font-semibold">{channelName}</span></p>
+      {/* Progress bar */}
+      <div className="w-64 mx-auto">
+        <div className="flex justify-between text-zinc-600 text-[10px] font-semibold mb-2">
+          <span>{count} fetched</span>
+          {total > 0 && <span>of ~{total} total</span>}
+        </div>
+        <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
+          <motion.div
+            className="h-full bg-red-500 rounded-full"
+            initial={{ width: '0%' }}
+            animate={{ width: total > 0 ? `${Math.min((count / total) * 100, 95)}%` : '60%' }}
+            transition={{ duration: 0.5 }}
+          />
+        </div>
+      </div>
+    </div>
+    <p className="text-zinc-700 text-[11px]">This happens once — all future questions search the full channel</p>
+  </div>
+);
+
+/* ─────────────────────────────────────────────
+   Main AskAI Page
+───────────────────────────────────────────── */
+const AskAi = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const {
+    channelId = '',
+    channelName = '',
+    channelAvatar = '',
+    totalVideos = 0,
+  } = location.state || {};
+
+  // All videos fetched from the channel
+  const [allVideos, setAllVideos] = useState([]);
+  const [indexing, setIndexing] = useState(false);
+  const [indexCount, setIndexCount] = useState(0);
+  const [indexError, setIndexError] = useState('');
+
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [isThinking, setIsThinking] = useState(false);
+  const [thinkingStatus, setThinkingStatus] = useState('');
+  const [activeClip, setActiveClip] = useState(null);
+
+  const scrollRef = useRef(null);
+  const hasFetched = useRef(false);
+
+  const isReady = allVideos.length > 0;
+
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages, isThinking, activeClip]);
+
+  /* ── On mount: fetch ALL channel videos ── */
+  useEffect(() => {
+    if (!channelId || hasFetched.current) return;
+    hasFetched.current = true;
+
+    setIndexing(true);
+    fetchAllChannelVideos(channelId, (count, hasMore) => {
+      setIndexCount(count);
+    })
+      .then(videos => {
+        setAllVideos(videos);
+        setIndexing(false);
+        setMessages([{
+          role: 'assistant',
+          answer: `Indexed **${videos.length} videos** from **${channelName}** — every single upload is now searchable.\n\nAsk me anything about this channel and I'll find the exact timestamps across all videos.`,
+          clips: [],
+        }]);
+      })
+      .catch(err => {
+        setIndexError(err.message);
+        setIndexing(false);
+      });
+  }, [channelId]);
+
+  /* ─── AI helpers ─── */
+  const callAI = async (systemPrompt, userPrompt, maxTokens = 300) => {
+    const res = await fetch('/api/ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        max_tokens: maxTokens,
+        temperature: 0.2,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+      }),
+    });
+    if (!res.ok) throw new Error(`OpenAI error ${res.status}`);
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content?.trim() || '';
   };
 
-  const searchYouTube = async (query) => {
+  /* Step 1 — find relevant video IDs from full catalogue */
+  const findRelevantVideos = async (query, videos) => {
+    const BATCH = 50;
+    let found = [];
+    for (let i = 0; i < videos.length; i += BATCH) {
+      const batch = videos.slice(i, i + BATCH);
+      const list = batch.map((v, idx) =>
+        `${idx + 1}. ID:${v.id} | "${v.title}" | ${v.description.slice(0, 120).replace(/\n/g, ' ')}`
+      ).join('\n');
+
+      const raw = await callAI(
+        'Return only a valid JSON array of video IDs. No markdown, no explanation.',
+        `Find videos relevant to: "${query}"\n\nVIDEOS:\n${list}\n\nReturn JSON array of matching IDs, max 5 per batch. If none match return [].`
+      );
+      const clean = raw.replace(/```json|```/g, '').trim();
+      try {
+        const arr = JSON.parse(clean);
+        if (Array.isArray(arr)) found = [...found, ...arr];
+      } catch {
+        const match = clean.match(/\[[\s\S]*\]/);
+        if (match) try { const arr = JSON.parse(match[0]); if (Array.isArray(arr)) found = [...found, ...arr]; } catch {}
+      }
+    }
+    return [...new Set(found)].filter(id => videos.find(v => v.id === id)).slice(0, 8);
+  };
+
+  /* Step 2 — deep analyze one video */
+  const analyzeVideo = async (query, video, fullDescription) => {
+    const chapters = parseChapters(fullDescription);
+    const chapterBlock = chapters.length > 0
+      ? `CHAPTERS:\n${chapters.map(c => `  [${c.raw}] (${c.seconds}s) ${c.label}`).join('\n')}`
+      : 'NO CHAPTERS — estimate from description.';
+
+    const raw = await callAI(
+      'You are a YouTube video analyst. Return only valid JSON. No markdown fences.',
+      `Analyze this video to answer the user question with exact timestamps.
+
+VIDEO: "${video.title}"
+ID: ${video.id}
+DURATION: ${video.duration || 'unknown'}
+
+${chapterBlock}
+
+DESCRIPTION:
+${fullDescription.slice(0, 2500)}
+
+QUESTION: "${query}"
+
+Return JSON:
+{
+  "answer": "2-4 sentence answer about this video with **bold** key points",
+  "clips": [
+    {"videoId":"${video.id}","timestamp":"MM:SS","seconds":123,"label":"max 7 words","reason":"why this moment answers the question"}
+  ]
+}
+Max 3 clips. If video doesn't cover this: {"answer":"","clips":[]}`,
+      900
+    );
+
+    const clean = raw.replace(/```json|```/g, '').trim();
+    try { return JSON.parse(clean); }
+    catch { const m = clean.match(/\{[\s\S]*\}/); try { return JSON.parse(m?.[0] || '{}'); } catch { return { answer: '', clips: [] }; } }
+  };
+
+  /* Step 3 — synthesize answer across videos */
+  const synthesizeAnswer = async (query, videoAnswers) => {
+    if (videoAnswers.length === 1) return videoAnswers[0].answer;
+    const summaries = videoAnswers.filter(v => v.answer).map(v => `"${v.title}": ${v.answer}`).join('\n\n');
+    return await callAI(
+      'Write clear, concise answers. No JSON, no markdown fences.',
+      `User asked: "${query}"\n\nAnswers from multiple videos:\n${summaries}\n\nWrite a 3-5 sentence combined answer using **bold** for key points and "- " for bullet lists.`,
+      600
+    );
+  };
+
+  /* ─── Main send handler ─── */
+  const handleSend = async (e) => {
+    e.preventDefault();
+    const query = input.trim();
+    if (!query || isThinking || !isReady) return;
+
+    setInput('');
+    setActiveClip(null);
+    setMessages(prev => [...prev, { role: 'user', content: query }]);
+    setIsThinking(true);
+
     try {
-      const searchRes = await fetch(
-        `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=1&q=${encodeURIComponent(query)}&type=video&videoEmbeddable=true&key=${YOUTUBE_API_KEY}`
-      );
-      const searchData = await searchRes.json();
-      const videoId = searchData.items[0]?.id?.videoId;
-      if (!videoId) return null;
-      const detailRes = await fetch(
-        `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${YOUTUBE_API_KEY}`
-      );
-      const detailData = await detailRes.json();
-      const description = detailData.items[0]?.snippet?.description || "";
-      return { videoId, chapters: extractChapters(description) };
-    } catch (error) { 
-      console.error("YT Error:", error);
-      return null; 
+      const videoMap = Object.fromEntries(allVideos.map(v => [v.id, v]));
+
+      setThinkingStatus(`Searching ${allVideos.length} videos…`);
+      const relevantIds = await findRelevantVideos(query, allVideos);
+
+      if (!relevantIds.length) {
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          answer: `I searched all **${allVideos.length} videos** from **${channelName}** but found no videos covering **"${query}"**.\n\nTry different keywords that might appear in a video title.`,
+          clips: [],
+        }]);
+        return;
+      }
+
+      setThinkingStatus(`Fetching full content for ${relevantIds.length} video${relevantIds.length > 1 ? 's' : ''}…`);
+      const descMap = await fetchFullDescriptions(relevantIds);
+
+      const videoAnswers = [];
+      const allClips = [];
+
+      for (let idx = 0; idx < relevantIds.length; idx++) {
+        const id = relevantIds[idx];
+        const video = videoMap[id];
+        setThinkingStatus(`Analyzing "${video.title.slice(0, 45)}…" (${idx + 1}/${relevantIds.length})`);
+
+        const result = await analyzeVideo(query, video, descMap[id] || video.description || '');
+        if (result.answer) videoAnswers.push({ title: video.title, answer: result.answer });
+        if (Array.isArray(result.clips)) {
+          allClips.push(...result.clips.filter(c => c.videoId && c.timestamp).map(c => ({
+            ...c,
+            seconds: typeof c.seconds === 'number' ? c.seconds : toSeconds(c.timestamp),
+            videoTitle: video.title,
+            thumbnail: video.thumbnail || '',
+          })));
+        }
+      }
+
+      setThinkingStatus('Writing answer…');
+      const finalAnswer = videoAnswers.length > 0
+        ? await synthesizeAnswer(query, videoAnswers)
+        : `Found **${allClips.length} clip${allClips.length !== 1 ? 's' : ''}** across **${relevantIds.length} video${relevantIds.length !== 1 ? 's' : ''}**.`;
+
+      const seen = new Set();
+      const dedupedClips = allClips.filter(c => {
+        const k = `${c.videoId}-${c.seconds}`;
+        if (seen.has(k)) return false;
+        seen.add(k); return true;
+      });
+
+      setMessages(prev => [...prev, { role: 'assistant', answer: finalAnswer, clips: dedupedClips }]);
+
+    } catch (err) {
+      setMessages(prev => [...prev, { role: 'assistant', answer: '', clips: [], error: `Search failed: ${err.message}` }]);
+    } finally {
+      setIsThinking(false);
+      setThinkingStatus('');
     }
   };
 
-  // Logic extracted into a reusable function
-  const performSearch = async (query) => {
-    setMessages(prev => [...prev, { role: 'user', content: query }]);
-    setIsTyping(true);
-    const detectedStartTime = parseTimestamp(query);
-    setStartTime(detectedStartTime);
-    setActiveVideo(null); 
-    setChapters([]);
-    setIsVideoLoading(true);
-    
-    const data = await searchYouTube(query);
-    
-    setTimeout(() => {
-      setIsTyping(false);
-      setIsVideoLoading(false);
-      if (data) {
-        setActiveVideo(data.videoId);
-        setChapters(data.chapters);
-        setMessages(prev => [...prev, { 
-          role: 'assistant', 
-          content: `Visual uplink locked. Found ${data.chapters.length} segments in stream.`,
-        }]);
-      } else {
-        setMessages(prev => [...prev, { 
-          role: 'assistant', 
-          content: "Critical Error: Could not establish stable video uplink.",
-        }]);
-      }
-    }, 1500);
-  };
-
-  const handleSend = (e) => {
-    e.preventDefault();
-    if (!input.trim()) return;
-    performSearch(input);
-    setInput("");
-  };
-
+  /* ─────────── RENDER ─────────── */
   return (
-    <div className="h-screen w-full bg-[#020202] text-zinc-400 flex flex-col lg:flex-row overflow-hidden font-mono p-4 gap-4 selection:bg-red-500/30">
-      
-      <div className="fixed inset-0 pointer-events-none overflow-hidden opacity-30">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-red-600/20 blur-[120px] rounded-full" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-600/10 blur-[120px] rounded-full" />
+    <div className="h-screen w-full bg-[#080808] text-white flex flex-col overflow-hidden">
+      <Navbar />
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute top-[15%] left-[20%] w-[500px] h-[300px] bg-red-600/[0.06] blur-[130px] rounded-full" />
+        <div className="absolute bottom-[5%] right-[10%] w-[300px] h-[200px] bg-violet-600/[0.04] blur-[100px] rounded-full" />
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff02_1px,transparent_1px),linear-gradient(to_bottom,#ffffff02_1px,transparent_1px)] bg-[size:48px_48px]" />
       </div>
 
-      {/* --- LEFT: SYSTEM MONITOR & VIDEO --- */}
-      <section className="flex-[1.4] relative flex flex-col gap-4">
-        <div className="h-14 bg-white/[0.03] border border-white/10 rounded-2xl flex items-center px-6 backdrop-blur-md">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2">
-              <Cpu size={14} className={isVideoLoading ? "text-red-500 animate-spin" : "text-red-500"} />
-              <span className="text-[10px] font-bold uppercase tracking-widest text-white">
-                {isVideoLoading ? "Deep-Scanning Media..." : "Core: Online"}
-              </span>
-            </div>
-            {activeVideo && (
-              <div className="flex items-center gap-2 text-red-500 animate-pulse">
-                <Activity size={12} />
-                <span className="text-[10px] font-bold uppercase tracking-widest">Live Flux: Stable</span>
-              </div>
-            )}
-          </div>
-        </div>
+      <div className="relative z-10 flex flex-col flex-1 overflow-hidden pt-16">
 
-        <div className="flex-1 bg-white/[0.02] border border-white/5 rounded-3xl relative overflow-hidden backdrop-blur-sm shadow-2xl flex flex-col">
-          <div className="flex-1 relative">
-            <AnimatePresence mode="wait">
-              {isVideoLoading ? (
-                <motion.div key="loader" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full h-full flex flex-col items-center justify-center bg-black/60 relative z-50">
-                  <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 3, ease: "linear" }} className="w-32 h-32 border-2 border-red-500/10 border-t-red-500 rounded-full flex items-center justify-center">
-                    <Loader2 size={24} className="text-red-500 animate-spin" />
-                  </motion.div>
-                  <span className="mt-6 text-[10px] font-black tracking-[0.4em] text-red-500 animate-pulse uppercase">Segment Extraction</span>
-                </motion.div>
-              ) : activeVideo ? (
-                <motion.div key="video" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="w-full h-full flex flex-col relative">
-                  <div className="absolute top-4 left-4 z-20 flex gap-2">
-                    <div className="bg-red-600 px-3 py-1 rounded text-[10px] text-white font-black">
-                      {startTime > 0 ? `OFFSET: ${startTime}s` : 'LIVE_FEED'}
-                    </div>
-                    <button onClick={() => setActiveVideo(null)} className="bg-black/80 hover:bg-red-600 p-1.5 rounded transition-all text-white border border-white/10">
-                      <X size={14} />
-                    </button>
-                  </div>
-                  <iframe
-                    width="100%" height="100%"
-                    src={`https://www.youtube-nocookie.com/embed/${activeVideo}?autoplay=1&start=${startTime}&modestbranding=1`}
-                    frameBorder="0" allow="autoplay; encrypted-media" allowFullScreen
-                  />
-                </motion.div>
-              ) : (
-                <motion.div key="dashboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full h-full p-8 flex flex-col">
-                  <div className="flex items-center justify-between mb-8 border-b border-white/5 pb-4">
-                    <div className="flex flex-col">
-                      <h3 className="text-white text-xs font-black tracking-widest uppercase">System Diagnostics</h3>
-                      <p className="text-[9px] text-zinc-600 mt-1 uppercase">Node: RAMCHANDPURA_REDACTED // Status: Ready</p>
-                    </div>
-                    <Shield size={20} className="text-red-500/20" />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4 mb-8">
-                    <div className="p-4 bg-white/[0.03] border border-white/5 rounded-2xl">
-                      <HardDrive size={14} className="text-red-500 mb-2" />
-                      <div className="text-[10px] font-bold text-zinc-500 uppercase">Buffer Memory</div>
-                      <div className="text-lg font-black text-white italic">94.2%</div>
-                    </div>
-                    <div className="p-4 bg-white/[0.03] border border-white/5 rounded-2xl">
-                      <Globe size={14} className="text-blue-500 mb-2" />
-                      <div className="text-[10px] font-bold text-zinc-500 uppercase">Neural Latency</div>
-                      <div className="text-lg font-black text-white italic">14ms</div>
-                    </div>
-                  </div>
-
-                  <div className="flex-1 bg-black/40 rounded-2xl border border-white/5 p-4 font-mono overflow-hidden relative">
-                    <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none bg-[repeating-linear-gradient(0deg,transparent,transparent_2px,rgba(255,255,255,0.1)_3px)]" />
-                    <div className="flex items-center gap-2 mb-3 text-red-500/50">
-                      <Terminal size={12} />
-                      <span className="text-[9px] uppercase font-bold tracking-widest">Access Logs</span>
-                    </div>
-                    <div className="space-y-2 text-[9px] leading-tight text-zinc-500">
-                      <p className="flex gap-2"><span className="text-red-900">[OK]</span> Initializing core kernel...</p>
-                      <p className="flex gap-2"><span className="text-red-900">[OK]</span> Encrypted tunnel established.</p>
-                      <p className="flex gap-2"><span className="text-zinc-700"> [..]</span> Awaiting user input parameters...</p>
-                      <p className="flex gap-2 animate-pulse"><span className="text-red-500">&gt;</span> SYSTEM_STANDBY_MODE_ACTIVE</p>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          <AnimatePresence>
-            {chapters.length > 0 && !isVideoLoading && (
-              <motion.div initial={{ height: 0 }} animate={{ height: '140px' }} exit={{ height: 0 }} className="border-t border-white/10 bg-black/40 p-4 overflow-hidden">
-                <div className="flex items-center gap-2 mb-3">
-                  <List size={12} className="text-red-500" />
-                  <span className="text-[9px] font-bold uppercase tracking-tighter text-zinc-500">Temporal Index Scanned</span>
-                </div>
-                <div className="flex gap-3 overflow-x-auto pb-2 custom-scrollbar">
-                  {chapters.map((ch, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setStartTime(ch.time)}
-                      className="flex-shrink-0 px-4 py-2 bg-white/5 border border-white/10 rounded-xl hover:bg-red-600/20 hover:border-red-500 transition-all text-left max-w-[160px]"
-                    >
-                      <div className="text-red-500 text-[9px] font-mono mb-1">{ch.raw}</div>
-                      <div className="text-white text-[10px] truncate font-bold">{ch.label}</div>
-                    </button>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      </section>
-
-      {/* --- RIGHT: CHAT CORE --- */}
-      <section className="flex-1 bg-white/[0.03] border border-white/10 rounded-3xl flex flex-col relative backdrop-blur-xl shadow-2xl overflow-hidden">
-        <div className="p-6 border-b border-white/5 flex items-center justify-between bg-black/40">
-           <div className="flex items-center gap-3">
-              <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_10px_#ef4444]" />
-              <span className="text-[11px] font-black tracking-[0.2em] text-white uppercase">Neural_Uplink_v3.0</span>
-           </div>
-           <Hash size={16} className="text-zinc-700" />
-        </div>
-
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
-          {messages.length === 0 && (
-            <div className="h-full flex flex-col justify-end pb-12">
-              <Sparkles className="text-red-600 mb-4" size={24} />
-              <h2 className="text-2xl font-black text-white mb-2 tracking-tighter uppercase italic">Initialized.</h2>
-              <p className="text-[11px] text-zinc-600 leading-relaxed max-w-[250px] font-bold uppercase">
-                Search for a topic. The system will auto-extract chapters for quick navigation.
+        {/* Top bar */}
+        <div className="shrink-0 px-5 py-3 border-b border-white/[0.06] bg-[#0a0a0a] flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <button onClick={() => navigate(-1)}
+              className="shrink-0 p-2 rounded-xl bg-white/[0.04] border border-white/[0.07] text-zinc-400 hover:text-white hover:bg-white/[0.08] transition-all">
+              <ArrowLeft size={14} />
+            </button>
+            {channelAvatar && <img src={channelAvatar} alt={channelName} className="w-7 h-7 rounded-full border border-white/10 shrink-0" />}
+            <div className="min-w-0">
+              <p className="text-white text-[13px] font-black truncate">{channelName || 'Channel AI'}</p>
+              <p className="text-zinc-600 text-[10px] font-semibold">
+                {indexing ? `Indexing… ${indexCount} fetched` : `${allVideos.length} videos indexed`}
               </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {indexing
+              ? <Loader2 size={14} className="text-red-500 animate-spin" />
+              : <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_#22c55e]" />
+            }
+            <span className="text-zinc-500 text-[10px] font-black uppercase tracking-widest hidden sm:block">
+              {indexing ? 'Indexing all videos…' : 'Full channel indexed'}
+            </span>
+          </div>
+        </div>
+
+        {/* Main content */}
+        <div className="flex-1 overflow-hidden flex flex-col">
+
+          {/* Indexing screen */}
+          {indexing && (
+            <IndexingScreen
+              count={indexCount}
+              total={totalVideos}
+              channelName={channelName}
+              channelAvatar={channelAvatar}
+            />
+          )}
+
+          {/* Index error */}
+          {indexError && !indexing && (
+            <div className="flex flex-col items-center justify-center h-full gap-4 p-8 text-center">
+              <AlertCircle size={32} className="text-red-500" />
+              <p className="text-red-400 text-sm font-semibold">{indexError}</p>
+              <button onClick={() => navigate(-1)}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/[0.06] border border-white/[0.1] text-white text-sm font-bold hover:bg-white/[0.1] transition-colors">
+                <ArrowLeft size={14} /> Go back
+              </button>
             </div>
           )}
 
-          <AnimatePresence mode="popLayout">
-            {messages.map((msg, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                <div className={`max-w-[90%] p-4 rounded-2xl text-[13px] border backdrop-blur-xl ${
-                  msg.role === 'user' 
-                  ? 'bg-white/5 border-white/10 text-white rounded-tr-none' 
-                  : 'bg-red-600/10 border-red-500/20 text-red-50 rounded-tl-none font-sans'
-                }`}>
-                   <div className="flex items-center gap-2 mb-2 opacity-40 text-[9px] font-bold uppercase tracking-widest font-mono">
-                      {msg.role === 'user' ? <User size={10} /> : <Bot size={10} />}
-                      {msg.role}
-                   </div>
-                   {msg.content}
-                </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-          {isTyping && <div className="text-[9px] text-red-500 animate-pulse font-black tracking-[0.3em] px-2 italic uppercase text-center">Rerouting Data...</div>}
-        </div>
+          {/* Chat — only shown when indexed */}
+          {!indexing && !indexError && (
+            <>
+              <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-8 max-w-4xl mx-auto w-full">
 
-        <div className="p-6 bg-black/40">
-          <form onSubmit={handleSend} className="flex items-center gap-3 bg-white/[0.02] border border-white/10 rounded-2xl p-2 pr-3 focus-within:border-red-500/50 transition-all">
-            <input 
-              type="text"
-              placeholder="Query any topic..."
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              className="flex-1 bg-transparent border-none outline-none text-[13px] py-3 px-4 text-white placeholder:text-zinc-800 font-mono tracking-tight"
-            />
-            <button 
-              type="submit"
-              disabled={!input.trim() || isVideoLoading}
-              className="w-10 h-10 bg-red-600 text-white rounded-xl flex items-center justify-center hover:bg-white hover:text-black transition-all duration-300 disabled:opacity-10"
-            >
-              <Send size={16} />
-            </button>
-          </form>
+                {messages.length === 0 && (
+                  <div className="flex flex-col items-center justify-center h-full gap-6 text-center py-20">
+                    <div className="w-20 h-20 rounded-3xl bg-red-600/10 border border-red-500/20 flex items-center justify-center">
+                      <Scissors size={36} className="text-red-500" />
+                    </div>
+                    <div>
+                      <h3 className="text-white text-2xl font-black uppercase tracking-tight mb-2">Ask Anything</h3>
+                      <p className="text-zinc-500 text-sm max-w-xs mx-auto leading-relaxed">
+                        All {allVideos.length} videos indexed. Ask about any topic and I'll find the exact clips.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <AnimatePresence mode="popLayout">
+                  {messages.map((msg, i) => (
+                    <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+
+                      {msg.role === 'user' && (
+                        <div className="flex justify-end">
+                          <div className="max-w-[75%] px-4 py-3 rounded-2xl rounded-tr-sm bg-white/[0.07] border border-white/[0.1] text-white text-[14px] font-medium">
+                            {msg.content}
+                          </div>
+                        </div>
+                      )}
+
+                      {msg.role === 'assistant' && (
+                        <div className="space-y-5">
+                          {(msg.answer || msg.error) && (
+                            <div className="flex items-start gap-3">
+                              <div className="w-8 h-8 rounded-xl bg-red-600/20 border border-red-500/30 flex items-center justify-center shrink-0 mt-0.5">
+                                <MessageSquare size={14} className="text-red-400" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                {msg.answer && (
+                                  <div className="px-4 py-3.5 rounded-2xl rounded-tl-sm bg-white/[0.03] border border-white/[0.07]">
+                                    <RichText text={msg.answer} />
+                                  </div>
+                                )}
+                                {msg.error && (
+                                  <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-red-900/20 border border-red-500/30 text-red-400 text-[12px] mt-2">
+                                    <AlertCircle size={12} /> {msg.error}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {msg.clips && msg.clips.length > 0 && (
+                            <div className="pl-11">
+                              <p className="text-zinc-600 text-[10px] font-black uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                                <Scissors size={10} />
+                                {msg.clips.length} clip{msg.clips.length !== 1 ? 's' : ''} · {new Set(msg.clips.map(c => c.videoId)).size} video{new Set(msg.clips.map(c => c.videoId)).size !== 1 ? 's' : ''}
+                              </p>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                                {msg.clips.map((clip, ci) => (
+                                  <ClipCard
+                                    key={`${clip.videoId}-${clip.seconds}-${ci}`}
+                                    clip={clip}
+                                    onPlay={c => setActiveClip(activeClip?.videoId === c.videoId && activeClip?.seconds === c.seconds ? null : c)}
+                                    isPlaying={activeClip?.videoId === clip.videoId && activeClip?.seconds === clip.seconds}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          <AnimatePresence>
+                            {activeClip && msg.clips?.some(c => c.videoId === activeClip.videoId && c.seconds === activeClip.seconds) && (
+                              <div className="pl-11">
+                                <InlinePlayer clip={activeClip} onClose={() => setActiveClip(null)} />
+                              </div>
+                            )}
+                          </AnimatePresence>
+
+                          {msg.clips && msg.clips.length === 0 && !msg.error && msg.answer && (
+                            <div className="pl-11 flex items-center gap-2 text-zinc-600 text-[11px]">
+                              <Search size={11} /> No timestamped clips found for this video.
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+
+                {isThinking && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-red-600/20 border border-red-500/30 flex items-center justify-center shrink-0">
+                      <Loader2 size={13} className="text-red-500 animate-spin" />
+                    </div>
+                    <div className="flex flex-col gap-2 pt-1.5">
+                      <div className="flex items-center gap-1">
+                        {[0, 120, 240].map(d => (
+                          <span key={d} className="w-1.5 h-1.5 rounded-full bg-red-500 animate-bounce" style={{ animationDelay: `${d}ms` }} />
+                        ))}
+                      </div>
+                      {thinkingStatus && <p className="text-zinc-500 text-[11px] font-medium">{thinkingStatus}</p>}
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+
+              {/* Input */}
+              <div className="shrink-0 border-t border-white/[0.06] bg-[#0a0a0a] px-4 md:px-8 py-4">
+                <div className="max-w-4xl mx-auto">
+                  <form onSubmit={handleSend} className="flex items-center gap-3 bg-white/[0.04] border border-white/[0.08] rounded-2xl px-4 py-2 focus-within:border-red-500/40 transition-colors">
+                    <Zap size={15} className="text-red-500 shrink-0" />
+                    <input
+                      type="text"
+                      placeholder={isReady ? `Ask anything about all ${allVideos.length} videos…` : 'Indexing channel, please wait…'}
+                      value={input}
+                      onChange={e => setInput(e.target.value)}
+                      disabled={!isReady || isThinking}
+                      className="flex-1 bg-transparent text-[13px] py-3 text-white outline-none placeholder:text-zinc-700 font-medium disabled:opacity-40"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!input.trim() || isThinking || !isReady}
+                      className="w-9 h-9 bg-red-600 rounded-xl flex items-center justify-center hover:bg-red-500 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95 shrink-0"
+                    >
+                      {isThinking ? <Loader2 size={14} className="animate-spin text-white" /> : <Send size={14} className="text-white" />}
+                    </button>
+                  </form>
+                  <p className="text-zinc-800 text-[10px] font-medium mt-2 text-center">
+                    Searches every video ever uploaded · click any clip to play that exact part
+                  </p>
+                </div>
+              </div>
+            </>
+          )}
         </div>
-      </section>
+      </div>
     </div>
   );
 };

@@ -14,6 +14,7 @@ import AskAi from './pages/AskAI';
 import PrivacyPolicy from './pages/PrivacyPolicy'; 
 import TermsOfService from './pages/TermsOfService'; 
 import ContactUs from './pages/ContactUs'; 
+import ConnectPage from './pages/Connect';
 
 // --- SCROLL TO TOP LOGIC ---
 const ScrollToTop = () => {
@@ -70,6 +71,9 @@ const AnimatedRoutes = ({ activeQuery, setActiveQuery }) => {
           <Route path="/explore" element={<Explore />} />
           <Route path="/results" element={<ResultsView query={activeQuery} />} />
           
+          {/* Connect Route */}
+          <Route path="/connect" element={<ConnectPage />} />
+
           {/* Ask AI Route */}
           <Route path="/ask-ai" element={<AskAi />} />
           

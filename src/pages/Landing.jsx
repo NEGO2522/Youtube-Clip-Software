@@ -17,7 +17,7 @@ import { auth } from '../firebase/firebase';
 import Navbar from '../components/Navbar';
 
 const LandingPage = ({ onSearchStart }) => {
-  const [query, setQuery] = useState('');
+  const [channelUrl, setChannelUrl] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const navigate = useNavigate();
 
@@ -51,11 +51,11 @@ const LandingPage = ({ onSearchStart }) => {
   const [isDeleting, setIsDeleting] = useState(false);
   
   const phrases = useMemo(() => [
-    "Describe a moment...",
-    "Search the sunset scene...",
-    "Find 'Hello' scene...",
-    "Extract red car shots...",
-    "Locate the chase..."
+    "Enter YouTube channel URL...",
+    "Paste channel link here...",
+    "Add creator's channel URL...",
+    "Input channel address...",
+    "Provide channel URL..."
   ], []);
 
   useEffect(() => {
@@ -127,11 +127,10 @@ const LandingPage = ({ onSearchStart }) => {
 
   const onSearch = (e) => {
     e.preventDefault();
-    if (!query) return;
+    if (!channelUrl) return;
 
     checkAuthAndExecute(() => {
-      onSearchStart(query);
-      navigate('/ask-ai', { state: { initialQuery: query } });
+      navigate('/connect', { state: { channelUrl } });
     });
   };
 
@@ -192,12 +191,12 @@ const LandingPage = ({ onSearchStart }) => {
                     }}
                     onBlur={() => setIsFocused(false)}
                     className="w-full bg-transparent py-4 md:p-4 text-base md:text-lg outline-none placeholder:text-zinc-700 font-bold"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
+                    value={channelUrl}
+                    onChange={(e) => setChannelUrl(e.target.value)}
                   />
                 </div>
                 <button type="submit" className="bg-red-600 text-white h-[50px] md:h-[56px] px-6 md:px-8 rounded-[1rem] md:rounded-[1.5rem] font-black uppercase tracking-tighter flex items-center justify-center gap-2 hover:bg-white hover:text-black transition-all mb-1 md:mb-0 mx-1 md:mx-0">
-                  Search <ChevronRight size={18} strokeWidth={3} />
+                  Extract <ChevronRight size={18} strokeWidth={3} />
                 </button>
               </div>
             </form>
